@@ -8,46 +8,53 @@ javascript:(function() {
     helper.id = 'exam-helper';
     helper.style.cssText = `
         position: fixed;
-        bottom: 15px;
-        right: 15px;
-        width: 300px;
-        max-height: 250px;
-        background: rgba(250, 250, 250, 0.95);
-        border-radius: 8px;
+        bottom: 20px;
+        right: 20px;
+        width: 320px;
+        max-height: 280px;
+        background: rgba(255, 255, 255, 0.97);
+        border-radius: 10px;
         z-index: 10000;
         padding: 15px;
         font-family: Arial, sans-serif;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        border: 1px solid #e0e0e0;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+        border: 1px solid #ddd;
         font-size: 14px;
         overflow: auto;
-        backdrop-filter: blur(3px);
-        opacity: 0.95;
+        backdrop-filter: blur(4px);
+        opacity: 0.98;
         transition: all 0.3s ease;
         display: block;
     `;
     
     helper.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #eee;">
-            <div style="font-weight: bold; font-size: 15px; color: #333;">🤖 Экзамен Помощник</div>
-            <div style="display: flex; gap: 6px;">
-                <button id="min-btn" style="background:#f5f5f5; border:1px solid #ddd; border-radius:4px; cursor:pointer; font-size:16px; width:26px; height:26px; display:flex; align-items:center; justify-content:center;">−</button>
-                <button id="close-btn" style="background:#f5f5f5; border:1px solid #ddd; border-radius:4px; cursor:pointer; font-size:16px; width:26px; height:26px; display:flex; align-items:center; justify-content:center;">×</button>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #eee;">
+            <div style="font-weight: bold; font-size: 16px; color: #2c3e50;">🤖 Экзамен Помощник</div>
+            <div style="display: flex; gap: 8px;">
+                <button id="min-btn" style="background:#f0f5ff; border:1px solid #d0d9ff; border-radius:5px; cursor:pointer; font-size:17px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:#4a6cf7;">−</button>
+                <button id="close-btn" style="background:#fff0f0; border:1px solid #ffd0d0; border-radius:5px; cursor:pointer; font-size:17px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:#f74a4a;">×</button>
             </div>
         </div>
-        <div id="helper-content" style="font-size: 14px; line-height: 1.5; color: #444; min-height: 60px;">
-            <div style="display:flex; align-items:center; gap:10px;">
-                <div class="loader" style="border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite;"></div>
-                <div>Анализ вопроса...</div>
+        <div id="helper-content" style="font-size: 14px; line-height: 1.5; color: #34495e; min-height: 70px; padding: 10px 0;">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <div class="loader" style="border: 4px solid rgba(52, 152, 219, 0.2); border-top: 4px solid #3498db; border-radius: 50%; width: 28px; height: 28px; animation: spin 1s linear infinite;"></div>
+                <div>Поиск вопросов на странице...</div>
             </div>
         </div>
-        <div style="font-size: 11px; color: #777; text-align: right; margin-top: 8px; padding-top: 8px; border-top: 1px solid #f0f0f0;">
-            Ctrl+Shift+X - показать/скрыть | Статус: <span id="status">активен</span>
+        <div style="font-size: 12px; color: #7f8c8d; text-align: right; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f5f5f5;">
+            Статус: <span id="status">инициализация</span> | Ctrl+Shift+X
         </div>
         <style>
             @keyframes spin {
                 0% { transform: rotate(0deg); }
                 100% { transform: rotate(360deg); }
+            }
+            #helper-content .answer-highlight {
+                background-color: #e8f5e9;
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-weight: bold;
+                color: #2e7d32;
             }
         </style>
     `;
@@ -68,73 +75,166 @@ javascript:(function() {
     // Управление окном
     document.getElementById('close-btn').addEventListener('click', () => helper.remove());
     document.getElementById('min-btn').addEventListener('click', () => {
-        helper.style.transform = helper.style.transform ? '' : 'translateY(calc(100% - 40px))';
+        helper.style.transform = helper.style.transform ? '' : 'translateY(calc(100% - 45px))';
     });
     
-    // Улучшенная функция сбора вопроса
-    function getCurrentQuestion() {
-        try {
-            // Альтернативные селекторы для разных LMS
-            const questionElem = document.querySelector('.test-table.active, .question-container, .quiz-question') 
-                || document.querySelector('[class*="question"]:not([style*="display:none"])');
+    // 1. Расширенный поиск вопросов
+    function findQuestions() {
+        statusEl.textContent = "поиск вопросов...";
+        
+        // Все возможные селекторы для вопросов
+        const questionSelectors = [
+            '.test-table', '.question', '.quiz-item', 
+            '.exam-question', '.test-question', '.assessment-item',
+            '[id*="question"]', '[class*="question"]', 
+            '[id*="test"]', '[class*="test"]',
+            '.question-container', '.question-wrapper'
+        ];
+        
+        const questions = [];
+        
+        // Поиск по всем возможным селекторам
+        questionSelectors.forEach(selector => {
+            document.querySelectorAll(selector).forEach(el => {
+                // Проверяем, содержит ли элемент текст вопроса
+                const questionText = el.innerText.trim();
+                if (questionText.length > 10 && !questions.some(q => q.element === el)) {
+                    questions.push({
+                        element: el,
+                        text: questionText.substring(0, 300),
+                        answers: []
+                    });
+                }
+            });
+        });
+        
+        // Если ничего не найдено, пробуем найти по структуре
+        if (questions.length === 0) {
+            statusEl.textContent = "анализ структуры...";
             
-            if (!questionElem) {
-                statusEl.textContent = "вопрос не найден";
-                return null;
-            }
+            // Поиск элементов, содержащих радиокнопки (варианты ответов)
+            document.querySelectorAll('input[type="radio"], input[type="checkbox"]').forEach(input => {
+                const container = input.closest('li, div, tr, .option, .answer');
+                if (container) {
+                    const questionContainer = container.closest('div, table, form, section');
+                    if (questionContainer && !questions.some(q => q.element === questionContainer)) {
+                        const questionText = questionContainer.innerText.substring(0, 300);
+                        questions.push({
+                            element: questionContainer,
+                            text: questionText,
+                            answers: []
+                        });
+                    }
+                }
+            });
+        }
+        
+        return questions;
+    }
+    
+    // 2. Сбор вариантов ответов для вопроса
+    function findAnswers(questionElement) {
+        const answers = [];
+        
+        // Поиск вариантов ответов внутри элемента вопроса
+        const answerContainers = questionElement.querySelectorAll(
+            '.test-answers, .answers, .options, .choices, .response-list, li, .option'
+        );
+        
+        answerContainers.forEach(container => {
+            // Поиск элементов ввода
+            const inputs = container.querySelectorAll('input[type="radio"], input[type="checkbox"]');
             
-            // Поиск текста вопроса
-            const questionText = questionElem.querySelector('.test-question, .question-text, .prompt')?.innerText 
-                || questionElem.querySelector('[class*="question"]')?.innerText;
-            
-            if (!questionText) {
-                statusEl.textContent = "текст вопроса пуст";
-                return null;
-            }
-            
-            // Сбор вариантов ответов
-            const answers = [];
-            const answerItems = questionElem.querySelectorAll('.test-answers li, .answer-option, .response-item');
-            
-            answerItems.forEach(item => {
+            inputs.forEach(input => {
                 try {
-                    const keyElement = item.querySelector('.test-variant, .option-key, .response-label');
-                    const key = keyElement?.innerText.trim().replace(/[.:)]/g, '') || '?';
+                    // Поиск текста ответа
+                    const textElement = input.closest('label') || 
+                                      input.nextElementSibling ||
+                                      input.parentNode;
                     
-                    const textElement = item.querySelector('label, .option-text, .response-text');
-                    const text = textElement?.innerText.replace(keyElement?.innerText || '', '').trim() 
-                        || item.innerText.replace(keyElement?.innerText || '', '').trim();
+                    let answerText = textElement?.innerText.trim() || '';
+                    
+                    // Очистка текста
+                    answerText = answerText
+                        .replace(/^\s*[A-Za-z0-9][.)]\s*/, '')  // Удаление префиксов типа "A. "
+                        .replace(/\s+/g, ' ')
+                        .substring(0, 200);
+                    
+                    // Определение ключа (A, B, C...)
+                    let key = '?';
+                    const keyMatch = textElement?.innerText.match(/^\s*([A-Za-z0-9])[.)]/);
+                    if (keyMatch) key = keyMatch[1].toUpperCase();
                     
                     answers.push({
                         key,
-                        text,
-                        element: item,
-                        input: item.querySelector('input[type="radio"], input[type="checkbox"]')
+                        text: answerText,
+                        element: container,
+                        input
                     });
                 } catch (e) {
                     console.error("Error parsing answer:", e);
                 }
             });
+        });
+        
+        return answers;
+    }
+    
+    // 3. Определение активного вопроса
+    function getCurrentQuestion() {
+        try {
+            // Поиск всех возможных вопросов
+            const questions = findQuestions();
+            if (questions.length === 0) return null;
             
-            return {
-                question: questionText,
-                answers,
-                element: questionElem
-            };
+            // Попробуем найти вопрос с классом "active"
+            let activeQuestion = questions.find(q => 
+                q.element.classList.contains('active') || 
+                q.element.classList.contains('current')
+            );
+            
+            // Если не нашли, возьмем первый вопрос в области видимости
+            if (!activeQuestion) {
+                statusEl.textContent = "поиск видимого вопроса...";
+                const viewportHeight = window.innerHeight;
+                
+                for (const q of questions) {
+                    const rect = q.element.getBoundingClientRect();
+                    if (rect.top >= 0 && rect.bottom <= viewportHeight + 200) {
+                        activeQuestion = q;
+                        break;
+                    }
+                }
+            }
+            
+            // Если все еще не нашли, возьмем первый вопрос
+            if (!activeQuestion) {
+                statusEl.textContent = "используем первый вопрос";
+                activeQuestion = questions[0];
+            }
+            
+            // Собираем ответы для найденного вопроса
+            activeQuestion.answers = findAnswers(activeQuestion.element);
+            
+            return activeQuestion;
         } catch (error) {
-            statusEl.textContent = "ошибка сбора данных";
-            contentEl.innerHTML = `<div style="color:#d32f2f;">Ошибка: ${error.message}</div>`;
+            statusEl.textContent = "ошибка поиска";
+            contentEl.innerHTML = `<div style="color:#e74c3c;">Ошибка: ${error.message}</div>`;
             return null;
         }
     }
     
-    // Функция запроса к ИИ с таймаутом
+    // 4. Функция запроса к ИИ
     async function getAIResponse(questionData) {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 секунд таймаут
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
         
         try {
             statusEl.textContent = "запрос к ИИ...";
+            contentEl.innerHTML = `<div style="display:flex;align-items:center;gap:12px;">
+                <div class="loader" style="border:4px solid rgba(52,152,219,0.2);border-top:4px solid #3498db;border-radius:50%;width:28px;height:28px;animation:spin 1s linear infinite;"></div>
+                <div>Отправка вопроса на анализ...</div>
+            </div>`;
             
             const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
@@ -146,11 +246,11 @@ javascript:(function() {
                     model: MODEL,
                     messages: [{
                         role: "user",
-                        content: `Дай ответ на экзаменационный вопрос. Формат ответа:
+                        content: `Анализируй экзаменационный вопрос. Формат ответа:
 1. Рекомендуемый вариант: [БУКВА]
 2. Обоснование: [1 предложение]
 
-Вопрос: ${questionData.question.substring(0, 1000)} 
+Вопрос: ${questionData.text.substring(0, 1000)} 
 Варианты: 
 ${questionData.answers.slice(0, 10).map(a => `[${a.key}] ${a.text.substring(0, 200)}`).join('\n')}`
                     }],
@@ -163,7 +263,7 @@ ${questionData.answers.slice(0, 10).map(a => `[${a.key}] ${a.text.substring(0, 2
             clearTimeout(timeoutId);
             
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                throw new Error(`Ошибка API: ${response.status}`);
             }
             
             const data = await response.json();
@@ -172,51 +272,35 @@ ${questionData.answers.slice(0, 10).map(a => `[${a.key}] ${a.text.substring(0, 2
         } catch (error) {
             clearTimeout(timeoutId);
             statusEl.textContent = "ошибка запроса";
-            
-            // Альтернативный метод, если API не работает
             return getFallbackResponse(questionData);
         }
     }
     
-    // Резервный метод, если API недоступно
-    function getFallbackResponse(questionData) {
-        statusEl.textContent = "используется локальный анализ";
-        
-        // Простая эвристика для выбора ответа
-        const keywords = ["верно", "правильно", "да", "true", "yes", "корректно", "является"];
-        const answers = questionData.answers;
-        
-        // Попробуем найти ответы с ключевыми словами
-        for (let i = 0; i < answers.length; i++) {
-            if (keywords.some(kw => answers[i].text.toLowerCase().includes(kw))) {
-                return `1. Рекомендуемый вариант: ${answers[i].key}\n2. Обоснование: Содержит ключевое слово в тексте ответа`;
-            }
-        }
-        
-        // Если не нашли - выбираем самый длинный ответ
-        const longestAnswer = answers.reduce((longest, current) => 
-            current.text.length > longest.text.length ? current : longest, answers[0]);
-        
-        return `1. Рекомендуемый вариант: ${longestAnswer.key}\n2. Обоснование: Самый подробный вариант ответа`;
-    }
-    
-    // Главная функция обработки
+    // 5. Главная функция обработки
     async function processQuestion() {
-        statusEl.textContent = "поиск вопроса...";
-        const questionData = getCurrentQuestion();
-        
-        if (!questionData || !questionData.answers || questionData.answers.length === 0) {
-            contentEl.innerHTML = "<div>Вопрос не обнаружен. Прокрутите страницу вниз.</div>";
-            return;
-        }
-        
         try {
-            contentEl.innerHTML = `<div style="display:flex;align-items:center;gap:10px;">
-                <div class="loader" style="border:3px solid #f3f3f3;border-top:3px solid #3498db;border-radius:50%;width:24px;height:24px;animation:spin 1s linear infinite;"></div>
-                <div>Анализ вопроса...</div>
-            </div>`;
+            const questionData = getCurrentQuestion();
             
-            statusEl.textContent = "отправка запроса...";
+            if (!questionData) {
+                contentEl.innerHTML = `
+                    <div style="background:#fff8e1; padding:15px; border-radius:8px; border-left:4px solid #ffc107;">
+                        <h4 style="margin-top:0; color:#d35400;">Вопрос не обнаружен</h4>
+                        <p>Попробуйте:</p>
+                        <ul style="padding-left:20px;">
+                            <li>Прокрутить страницу вниз</li>
+                            <li>Перейти к следующему вопросу</li>
+                            <li>Обновить страницу и активировать скрипт снова</li>
+                        </ul>
+                        <p style="margin-bottom:0;">Система будет автоматически перепроверять...</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Обновление статуса
+            statusEl.textContent = "обработка вопроса...";
+            
+            // Отправка запроса к ИИ
             const aiResponse = await getAIResponse(questionData);
             
             // Форматирование ответа
@@ -226,7 +310,7 @@ ${questionData.answers.slice(0, 10).map(a => `[${a.key}] ${a.text.substring(0, 2
             if (keyMatch) {
                 formattedResponse = aiResponse.replace(
                     /(Рекомендуемый вариант:\s*)([A-Я0-9])/i, 
-                    '$1<span style="background-color:#e8f5e9; padding:2px 6px; border-radius:4px; font-weight:bold;">$2</span>'
+                    '$1<span class="answer-highlight">$2</span>'
                 );
             }
             
@@ -242,31 +326,28 @@ ${questionData.answers.slice(0, 10).map(a => `[${a.key}] ${a.text.substring(0, 2
                     setTimeout(() => {
                         answer.input.click();
                         statusEl.textContent = "выбран ответ " + answerKey;
+                        
+                        // Пометка выбранного ответа
+                        contentEl.innerHTML += `<div style="margin-top:10px; padding:8px; background:#e8f5e9; border-radius:5px; border-left:3px solid #4caf50;">
+                            ✔️ Автоматически выбран вариант ${answerKey}
+                        </div>`;
                     }, 2000);
                 }
             }
             
         } catch (error) {
-            contentEl.innerHTML = `<div style="color:#d32f2f;">Ошибка: ${error.message}</div>`;
+            contentEl.innerHTML = `<div style="color:#e74c3c; padding:10px; background:#fdefef; border-radius:5px;">Ошибка: ${error.message}</div>`;
             statusEl.textContent = "ошибка обработки";
         }
     }
     
-    // Скрытие консольных логов
-    const originalConsole = { log: console.log, error: console.error };
-    console.log = function() {};
-    console.error = function() {};
+    // 6. Инициализация и запуск
+    console.log = function() {}; // Отключаем логи
     
-    // Восстановление console при закрытии
-    helper.querySelector('#close-btn').addEventListener('click', () => {
-        console.log = originalConsole.log;
-        console.error = originalConsole.error;
-    });
-    
-    // Запуск обработки
+    // Первый запуск
     processQuestion();
     
-    // Периодическая проверка
+    // Периодическая проверка каждые 10 секунд
     let processInterval = setInterval(processQuestion, 10000);
     
     // Остановка при закрытии
@@ -276,10 +357,6 @@ ${questionData.answers.slice(0, 10).map(a => `[${a.key}] ${a.text.substring(0, 2
     
     // Автоскрытие при изменении видимости страницы
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') {
-            helper.style.display = 'none';
-        } else {
-            helper.style.display = 'block';
-        }
+        helper.style.display = document.visibilityState === 'visible' ? 'block' : 'none';
     });
 })();
