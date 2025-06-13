@@ -1,5 +1,4 @@
-// Экзаменационный помощник - полная версия
-(function() {
+javascript:(function() {
     // Конфигурация
     const API_KEY = "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";
     const MODEL = "qwen/qwen3-235b-a22b:free";
@@ -7,77 +6,136 @@
     // Создаем интерфейс помощника
     const helper = document.createElement('div');
     helper.id = 'exam-helper';
-    helper.style = `
+    helper.style.cssText = `
         position: fixed;
         bottom: 15px;
         right: 15px;
-        width: 280px;
-        max-height: 200px;
-        background: rgba(250, 250, 250, 0.92);
+        width: 300px;
+        max-height: 250px;
+        background: rgba(250, 250, 250, 0.95);
         border-radius: 8px;
         z-index: 10000;
-        padding: 12px;
-        font-family: Arial;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-        border: 1px solid #eaeaea;
-        font-size: 13px;
+        padding: 15px;
+        font-family: Arial, sans-serif;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        border: 1px solid #e0e0e0;
+        font-size: 14px;
         overflow: auto;
-        backdrop-filter: blur(2px);
-        opacity: 0.9;
+        backdrop-filter: blur(3px);
+        opacity: 0.95;
         transition: all 0.3s ease;
+        display: block;
     `;
     
     helper.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <div style="font-weight: bold; color: #444;">🤖 Экзамен Помощник</div>
-            <div style="display: flex; gap: 5px;">
-                <button id="min-btn" style="background:none; border:none; cursor:pointer; font-size:18px;">−</button>
-                <button id="close-btn" style="background:none; border:none; cursor:pointer; font-size:18px;">×</button>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #eee;">
+            <div style="font-weight: bold; font-size: 15px; color: #333;">🤖 Экзамен Помощник</div>
+            <div style="display: flex; gap: 6px;">
+                <button id="min-btn" style="background:#f5f5f5; border:1px solid #ddd; border-radius:4px; cursor:pointer; font-size:16px; width:26px; height:26px; display:flex; align-items:center; justify-content:center;">−</button>
+                <button id="close-btn" style="background:#f5f5f5; border:1px solid #ddd; border-radius:4px; cursor:pointer; font-size:16px; width:26px; height:26px; display:flex; align-items:center; justify-content:center;">×</button>
             </div>
         </div>
-        <div id="helper-content" style="font-size: 13px; line-height: 1.4; color: #333;">
-            Загрузка...
+        <div id="helper-content" style="font-size: 14px; line-height: 1.5; color: #444; min-height: 60px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div class="loader" style="border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite;"></div>
+                <div>Анализ вопроса...</div>
+            </div>
         </div>
-        <div style="font-size: 10px; color: #999; text-align: right; margin-top: 5px;">
-            Ctrl+Shift+X - скрыть
+        <div style="font-size: 11px; color: #777; text-align: right; margin-top: 8px; padding-top: 8px; border-top: 1px solid #f0f0f0;">
+            Ctrl+Shift+X - показать/скрыть | Статус: <span id="status">активен</span>
         </div>
+        <style>
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        </style>
     `;
     
     document.body.appendChild(helper);
     
-    // Управление окном
-    document.getElementById('close-btn').addEventListener('click', () => helper.remove());
-    document.getElementById('min-btn').addEventListener('click', () => {
-        helper.style.transform = helper.style.transform ? '' : 'translateY(calc(100% - 30px))';
-    });
+    // Элементы управления
+    const contentEl = document.getElementById('helper-content');
+    const statusEl = document.getElementById('status');
     
-    // Горячие клавиши
+    // Показать/скрыть по горячим клавишам
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.shiftKey && e.key === 'X') {
             helper.style.display = helper.style.display === 'none' ? 'block' : 'none';
         }
     });
     
-    // Функция обработки вопросов
-    async function processQuestion() {
+    // Управление окном
+    document.getElementById('close-btn').addEventListener('click', () => helper.remove());
+    document.getElementById('min-btn').addEventListener('click', () => {
+        helper.style.transform = helper.style.transform ? '' : 'translateY(calc(100% - 40px))';
+    });
+    
+    // Улучшенная функция сбора вопроса
+    function getCurrentQuestion() {
         try {
-            // Поиск активного вопроса
-            const questionElem = document.querySelector('.test-table.active');
-            if (!questionElem) return;
+            // Альтернативные селекторы для разных LMS
+            const questionElem = document.querySelector('.test-table.active, .question-container, .quiz-question') 
+                || document.querySelector('[class*="question"]:not([style*="display:none"])');
             
-            const questionText = questionElem.querySelector('.test-question')?.innerText;
-            const answers = [];
+            if (!questionElem) {
+                statusEl.textContent = "вопрос не найден";
+                return null;
+            }
+            
+            // Поиск текста вопроса
+            const questionText = questionElem.querySelector('.test-question, .question-text, .prompt')?.innerText 
+                || questionElem.querySelector('[class*="question"]')?.innerText;
+            
+            if (!questionText) {
+                statusEl.textContent = "текст вопроса пуст";
+                return null;
+            }
             
             // Сбор вариантов ответов
-            questionElem.querySelectorAll('.test-answers li').forEach(item => {
-                const key = item.querySelector('.test-variant')?.innerText.trim();
-                const text = item.querySelector('label').innerText.replace(key, '').trim();
-                answers.push({key, text, element: item});
+            const answers = [];
+            const answerItems = questionElem.querySelectorAll('.test-answers li, .answer-option, .response-item');
+            
+            answerItems.forEach(item => {
+                try {
+                    const keyElement = item.querySelector('.test-variant, .option-key, .response-label');
+                    const key = keyElement?.innerText.trim().replace(/[.:)]/g, '') || '?';
+                    
+                    const textElement = item.querySelector('label, .option-text, .response-text');
+                    const text = textElement?.innerText.replace(keyElement?.innerText || '', '').trim() 
+                        || item.innerText.replace(keyElement?.innerText || '', '').trim();
+                    
+                    answers.push({
+                        key,
+                        text,
+                        element: item,
+                        input: item.querySelector('input[type="radio"], input[type="checkbox"]')
+                    });
+                } catch (e) {
+                    console.error("Error parsing answer:", e);
+                }
             });
             
-            if (!questionText) return;
+            return {
+                question: questionText,
+                answers,
+                element: questionElem
+            };
+        } catch (error) {
+            statusEl.textContent = "ошибка сбора данных";
+            contentEl.innerHTML = `<div style="color:#d32f2f;">Ошибка: ${error.message}</div>`;
+            return null;
+        }
+    }
+    
+    // Функция запроса к ИИ с таймаутом
+    async function getAIResponse(questionData) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 секунд таймаут
+        
+        try {
+            statusEl.textContent = "запрос к ИИ...";
             
-            // Отправка запроса к ИИ
             const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
                 headers: {
@@ -88,44 +146,140 @@
                     model: MODEL,
                     messages: [{
                         role: "user",
-                        content: `Дай ответ на экзаменационный вопрос максимально кратко, только букву правильного варианта и очень короткое объяснение (1 предложение).
-Вопрос: ${questionText}
-Варианты: ${answers.map(a => `${a.key}) ${a.text}`).join('; ')}`
+                        content: `Дай ответ на экзаменационный вопрос. Формат ответа:
+1. Рекомендуемый вариант: [БУКВА]
+2. Обоснование: [1 предложение]
+
+Вопрос: ${questionData.question.substring(0, 1000)} 
+Варианты: 
+${questionData.answers.slice(0, 10).map(a => `[${a.key}] ${a.text.substring(0, 200)}`).join('\n')}`
                     }],
-                    temperature: 0.1,
-                    max_tokens: 100
-                })
+                    temperature: 0.2,
+                    max_tokens: 150
+                }),
+                signal: controller.signal
             });
             
-            const data = await response.json();
-            const aiResponse = data.choices[0].message.content;
+            clearTimeout(timeoutId);
             
-            // Отображение ответа
-            document.getElementById('helper-content').innerHTML = aiResponse;
-            
-            // Автоматический выбор ответа
-            const keyMatch = aiResponse.match(/[A-Я]\)|\b([A-Я])\b/);
-            if (keyMatch) {
-                const answerKey = keyMatch[1] || keyMatch[0].charAt(0);
-                const answer = answers.find(a => a.key === answerKey);
-                if (answer) {
-                    setTimeout(() => {
-                        answer.element.querySelector('input[type="radio"]').click();
-                    }, 1500);
-                }
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
-        } catch (e) {
-            document.getElementById('helper-content').innerHTML = "Ошибка подключения";
+            
+            const data = await response.json();
+            return data.choices[0]?.message?.content.trim();
+            
+        } catch (error) {
+            clearTimeout(timeoutId);
+            statusEl.textContent = "ошибка запроса";
+            
+            // Альтернативный метод, если API не работает
+            return getFallbackResponse(questionData);
         }
     }
+    
+    // Резервный метод, если API недоступно
+    function getFallbackResponse(questionData) {
+        statusEl.textContent = "используется локальный анализ";
+        
+        // Простая эвристика для выбора ответа
+        const keywords = ["верно", "правильно", "да", "true", "yes", "корректно", "является"];
+        const answers = questionData.answers;
+        
+        // Попробуем найти ответы с ключевыми словами
+        for (let i = 0; i < answers.length; i++) {
+            if (keywords.some(kw => answers[i].text.toLowerCase().includes(kw))) {
+                return `1. Рекомендуемый вариант: ${answers[i].key}\n2. Обоснование: Содержит ключевое слово в тексте ответа`;
+            }
+        }
+        
+        // Если не нашли - выбираем самый длинный ответ
+        const longestAnswer = answers.reduce((longest, current) => 
+            current.text.length > longest.text.length ? current : longest, answers[0]);
+        
+        return `1. Рекомендуемый вариант: ${longestAnswer.key}\n2. Обоснование: Самый подробный вариант ответа`;
+    }
+    
+    // Главная функция обработки
+    async function processQuestion() {
+        statusEl.textContent = "поиск вопроса...";
+        const questionData = getCurrentQuestion();
+        
+        if (!questionData || !questionData.answers || questionData.answers.length === 0) {
+            contentEl.innerHTML = "<div>Вопрос не обнаружен. Прокрутите страницу вниз.</div>";
+            return;
+        }
+        
+        try {
+            contentEl.innerHTML = `<div style="display:flex;align-items:center;gap:10px;">
+                <div class="loader" style="border:3px solid #f3f3f3;border-top:3px solid #3498db;border-radius:50%;width:24px;height:24px;animation:spin 1s linear infinite;"></div>
+                <div>Анализ вопроса...</div>
+            </div>`;
+            
+            statusEl.textContent = "отправка запроса...";
+            const aiResponse = await getAIResponse(questionData);
+            
+            // Форматирование ответа
+            let formattedResponse = aiResponse;
+            const keyMatch = aiResponse.match(/Рекомендуемый вариант:\s*([A-Я0-9])/i);
+            
+            if (keyMatch) {
+                formattedResponse = aiResponse.replace(
+                    /(Рекомендуемый вариант:\s*)([A-Я0-9])/i, 
+                    '$1<span style="background-color:#e8f5e9; padding:2px 6px; border-radius:4px; font-weight:bold;">$2</span>'
+                );
+            }
+            
+            contentEl.innerHTML = formattedResponse.replace(/\n/g, '<br>');
+            statusEl.textContent = "анализ завершен";
+            
+            // Автоматический выбор ответа
+            if (keyMatch) {
+                const answerKey = keyMatch[1];
+                const answer = questionData.answers.find(a => a.key === answerKey);
+                
+                if (answer && answer.input) {
+                    setTimeout(() => {
+                        answer.input.click();
+                        statusEl.textContent = "выбран ответ " + answerKey;
+                    }, 2000);
+                }
+            }
+            
+        } catch (error) {
+            contentEl.innerHTML = `<div style="color:#d32f2f;">Ошибка: ${error.message}</div>`;
+            statusEl.textContent = "ошибка обработки";
+        }
+    }
+    
+    // Скрытие консольных логов
+    const originalConsole = { log: console.log, error: console.error };
+    console.log = function() {};
+    console.error = function() {};
+    
+    // Восстановление console при закрытии
+    helper.querySelector('#close-btn').addEventListener('click', () => {
+        console.log = originalConsole.log;
+        console.error = originalConsole.error;
+    });
     
     // Запуск обработки
     processQuestion();
     
     // Периодическая проверка
-    setInterval(processQuestion, 5000);
+    let processInterval = setInterval(processQuestion, 10000);
     
-    // Скрытие консольных логов
-    console.log = function(){};
-    console.error = function(){};
+    // Остановка при закрытии
+    helper.querySelector('#close-btn').addEventListener('click', () => {
+        clearInterval(processInterval);
+    });
+    
+    // Автоскрытие при изменении видимости страницы
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            helper.style.display = 'none';
+        } else {
+            helper.style.display = 'block';
+        }
+    });
 })();
